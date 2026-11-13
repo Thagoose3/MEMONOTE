@@ -57,6 +57,19 @@ test('Ctrl+P finds note by Thai word and opens it', async () => {
   await app.close()
 })
 
+test('Ctrl+P finds a note by its title right after typing it', async () => {
+  const { app, page } = await launchApp()
+  await page.keyboard.press('Control+n')
+  await page.getByLabel('ชื่อโน้ต', { exact: true }).fill('สดใหม่')
+  await page.keyboard.press('Control+p')
+  await page.getByPlaceholder('ค้นหาโน้ต').fill('สดใหม่')
+  await page.keyboard.press('Enter')
+  await page.waitForTimeout(800)
+  const all = await page.evaluate(() => window.memo.notes.listMeta())
+  expect(all.items.map((m) => m.title)).toEqual(['สดใหม่'])
+  await app.close()
+})
+
 test('drawer: create folder, move note into it, breadcrumb shows folder', async () => {
   const { app, page } = await launchApp()
   await newNote(page, 'ย้ายฉัน', 'x')

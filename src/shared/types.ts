@@ -41,12 +41,15 @@ export type BoardNode = { id: string; x: number; y: number; w?: number; h?: numb
 export type StrokeNode = Extract<BoardNode, { kind: 'stroke' }>
 
 export type EdgeColor = 'gray' | 'blue' | 'green' | 'red'
+export type Side = 'top' | 'right' | 'bottom' | 'left'
 export interface BoardEdge {
   id: string
   from: string
   to: string
   label?: string
   color: EdgeColor
+  fromSide?: Side
+  toSide?: Side
 }
 
 export interface Board {

@@ -172,7 +172,8 @@ export const actions = {
     set({ openNote: next })
     if (patch.title !== undefined) {
       const meta = get().metas[cur.id]
-      if (meta) putMetas((m) => (m[cur.id] = { ...meta, title: patch.title! }))
+      // index the new title immediately so search/[[ ]] find it before autosave runs
+      if (meta) applyMeta({ ...meta, title: patch.title })
     }
     noteSaver.schedule(next)
   },
