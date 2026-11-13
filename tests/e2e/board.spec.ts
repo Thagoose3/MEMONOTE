@@ -68,6 +68,37 @@ test('create board, add two note cards, connect, label edge, relaunch -> same', 
   await second.app.close()
 })
 
+async function typeTextCard(page: Page, text: string): Promise<void> {
+  await page.getByRole('button', { name: 'ข้อความ', exact: true }).click()
+  const r = (await page.locator('.board-canvas').boundingBox())!
+  await page.mouse.click(r.x + 200, r.y + 200)
+  await expect(page.getByLabel('ข้อความบนกระดาน')).toBeFocused()
+  await page.keyboard.type(text)
+}
+
+test('closing the app while typing in a text card keeps the text', async () => {
+  const first = await launchApp()
+  await newBoard(first.page)
+  await typeTextCard(first.page, 'ราคา 120')
+  await closeApp(first.app) // no blur
+  const second = await launchApp({ vault: first.vault, configDir: first.configDir })
+  const saved = await boards(second.page)
+  expect(saved[0].nodes).toMatchObject([{ kind: 'text', text: 'ราคา 120' }])
+  await second.app.close()
+})
+
+test('Ctrl+N while typing in a text card keeps the text on the old board', async () => {
+  const { app, page } = await launchApp()
+  await newBoard(page)
+  await typeTextCard(page, 'ยังอยู่')
+  await page.keyboard.press('Control+n')
+  await expect.poll(async () => (await boards(page)).length).toBe(2)
+  await expect
+    .poll(async () => (await boards(page)).flatMap((b) => b.nodes).find((n) => n.kind === 'text'))
+    .toMatchObject({ text: 'ยังอยู่' })
+  await app.close()
+})
+
 test('double-click card opens note in note mode', async () => {
   const { app, page } = await launchApp()
   await newNote(page, 'เปิดจากกระดาน', 'x')

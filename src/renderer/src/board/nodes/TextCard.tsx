@@ -1,19 +1,26 @@
 import { NodeResizer, useReactFlow, type NodeProps } from '@xyflow/react'
 import { useEffect, useRef } from 'react'
-import { boardActions, useBoard } from '../boardStore'
+import { boardActions, registerPendingEdit, useBoard } from '../boardStore'
 import { SideHandles } from './handles'
 
 export function TextCard({ id, data, selected }: NodeProps): React.JSX.Element {
   const editing = useBoard((s) => s.editingText === id)
   const { updateNodeData } = useReactFlow()
   const ref = useRef<HTMLTextAreaElement>(null)
-  useEffect(() => {
-    if (editing) {
-      ref.current?.focus()
-      ref.current?.select()
-    }
-  }, [editing])
   const text = (data.text as string) ?? ''
+
+  useEffect(() => {
+    if (!editing) return
+    ref.current?.focus()
+    ref.current?.select()
+    // If the app closes or the board changes before blur, commit what was typed.
+    registerPendingEdit(() => {
+      const v = ref.current?.value
+      if (v !== undefined && v !== text) boardActions.patchNode(id, { text: v })
+    })
+    return () => registerPendingEdit(null)
+  }, [editing, id, text])
+
   return (
     <div className="card text-card" onDoubleClick={() => boardActions.setEditingText(id)}>
       <NodeResizer isVisible={!!selected} minWidth={80} minHeight={40} />
@@ -25,6 +32,7 @@ export function TextCard({ id, data, selected }: NodeProps): React.JSX.Element {
           aria-label="ข้อความบนกระดาน"
           defaultValue={text}
           onBlur={(e) => {
+            registerPendingEdit(null)
             boardActions.setEditingText(null)
             if (e.target.value !== text) updateNodeData(id, { text: e.target.value })
           }}

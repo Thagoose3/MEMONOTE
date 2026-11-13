@@ -38,7 +38,18 @@ const set = useBoard.setState
 const get = useBoard.getState
 
 const saver = createAutosaver<Board>((b) => storage.boards.save(b))
-storage.onFlushRequest(() => saver.flush())
+storage.onFlushRequest(() => boardActions.flush())
+
+/** A text field on the canvas that is being edited right now and how to commit its current value. */
+let pendingEdit: (() => void) | null = null
+export function registerPendingEdit(fn: (() => void) | null): void {
+  pendingEdit = fn
+}
+function commitPendingEdit(): void {
+  const fn = pendingEdit
+  pendingEdit = null
+  fn?.()
+}
 
 function publish(b: Board | null): void {
   publishBoardTitle(b ? { title: b.title, rename: (t) => boardActions.rename(t) } : null)
@@ -50,7 +61,7 @@ export const DEFAULT_BOARD_TITLE = 'กระดานใหม่'
 
 export const boardActions = {
   async open(id: string): Promise<void> {
-    await saver.flush()
+    await boardActions.flush()
     const board = await storage.boards.read(id)
     set((s) => ({ board, rev: s.rev + 1, editingEdge: null, editingText: null }))
     publish(board)
@@ -59,7 +70,7 @@ export const boardActions = {
   },
 
   async create(): Promise<void> {
-    await saver.flush()
+    await boardActions.flush()
     const now = Date.now()
     const board: Board = { id: ulid(), title: DEFAULT_BOARD_TITLE, created: now, updated: now, nodes: [], edges: [] }
     await storage.boards.save(board)
@@ -68,7 +79,7 @@ export const boardActions = {
   },
 
   close(): void {
-    void saver.flush()
+    void boardActions.flush()
     set({ board: null })
     publish(null)
     useApp.setState({ openBoardId: null })
@@ -113,6 +124,19 @@ export const boardActions = {
     if (record) history.push(board)
   },
 
+  /** Change one node's fields from outside the canvas (e.g. committing an open text field). */
+  patchNode(id: string, patch: Partial<Extract<BoardNode, { kind: 'text' }>>): void {
+    const b = get().board
+    if (!b) return
+    boardActions.replace({ ...b, nodes: b.nodes.map((n) => (n.id === id ? ({ ...n, ...patch } as BoardNode) : n)) })
+  },
+
+  patchEdge(id: string, patch: Partial<BoardEdge>): void {
+    const b = get().board
+    if (!b) return
+    boardActions.replace({ ...b, edges: b.edges.map((e) => (e.id === id ? { ...e, ...patch } : e)) })
+  },
+
   addElements(nodes: BoardNode[], edges: BoardEdge[] = []): void {
     const b = get().board
     if (!b) return
@@ -154,7 +178,9 @@ export const boardActions = {
     set({ editingText: id })
   },
 
+  /** Commit any text field being edited on the canvas, then write pending changes. */
   flush(): Promise<void> {
+    commitPendingEdit()
     return saver.flush()
   }
 }

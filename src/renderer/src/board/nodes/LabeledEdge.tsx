@@ -1,6 +1,6 @@
 import { BaseEdge, EdgeLabelRenderer, getBezierPath, useReactFlow, type EdgeProps } from '@xyflow/react'
 import type { EdgeColor } from '@shared/types'
-import { boardActions, useBoard } from '../boardStore'
+import { boardActions, registerPendingEdit, useBoard } from '../boardStore'
 
 export const EDGE_COLORS: Record<EdgeColor, string> = {
   gray: '#8a8f98',
@@ -33,10 +33,19 @@ export function LabeledEdge(props: EdgeProps): React.JSX.Element {
           {editing ? (
             <input
               autoFocus
+              ref={(el) => {
+                // If the app closes or the board changes before blur, commit what was typed.
+                if (el)
+                  registerPendingEdit(() => {
+                    const v = el.value.trim()
+                    if (v !== (label ?? '')) boardActions.patchEdge(id, { label: v || undefined })
+                  })
+              }}
               className="edge-label-input"
               placeholder="ป้ายเส้น"
               defaultValue={label ?? ''}
               onBlur={(e) => {
+                registerPendingEdit(null)
                 boardActions.setEditingEdge(null)
                 const v = e.target.value.trim()
                 updateEdgeData(id, { label: v || undefined })
