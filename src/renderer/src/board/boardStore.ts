@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { ulid } from 'ulid'
-import { CONFLICT_SUFFIX, type Board, type BoardEdge, type BoardNode } from '@shared/types'
+import { CONFLICT_SUFFIX, type Board, type BoardEdge, type BoardNode, type PenSize } from '@shared/types'
+import { createHistory } from './history'
+import { PEN_COLORS } from './strokePath'
 import { storage } from '../storage'
 import { actions as app, onBoardExternal, showToast, useApp } from '../store/appStore'
 import { createAutosaver } from '../store/autosave'
@@ -16,9 +18,22 @@ export interface BoardState {
   tool: Tool
   editingEdge: string | null
   editingText: string | null
+  penColor: string
+  penSize: PenSize
+  /** strokes the eraser is currently sweeping over (shown faded until release) */
+  erasing: Set<string>
 }
 
-export const useBoard = create<BoardState>(() => ({ board: null, rev: 0, tool: 'select', editingEdge: null, editingText: null }))
+export const useBoard = create<BoardState>(() => ({
+  board: null,
+  rev: 0,
+  tool: 'select',
+  editingEdge: null,
+  editingText: null,
+  penColor: PEN_COLORS[0],
+  penSize: 'M',
+  erasing: new Set()
+}))
 const set = useBoard.setState
 const get = useBoard.getState
 
@@ -29,13 +44,7 @@ function publish(b: Board | null): void {
   publishBoardTitle(b ? { title: b.title, rename: (t) => boardActions.rename(t) } : null)
 }
 
-/** Commit hooks so the history (undo/redo) can observe every committed change. */
-type CommitListener = (b: Board) => void
-const commitListeners = new Set<CommitListener>()
-export function onBoardCommit(l: CommitListener): () => void {
-  commitListeners.add(l)
-  return () => commitListeners.delete(l)
-}
+const history = createHistory<Board>(100)
 
 export const DEFAULT_BOARD_TITLE = 'กระดานใหม่'
 
@@ -46,7 +55,7 @@ export const boardActions = {
     set((s) => ({ board, rev: s.rev + 1, editingEdge: null, editingText: null }))
     publish(board)
     app.setOpenBoard(id)
-    commitListeners.forEach((l) => l(board))
+    history.reset(board)
   },
 
   async create(): Promise<void> {
@@ -94,14 +103,14 @@ export const boardActions = {
   commit(board: Board): void {
     set({ board })
     saver.schedule(board)
-    commitListeners.forEach((l) => l(board))
+    history.push(board)
   },
 
   /** A change made outside the canvas: commit and make the canvas reload. */
   replace(board: Board, record = true): void {
     set((s) => ({ board, rev: s.rev + 1 }))
     saver.schedule(board)
-    if (record) commitListeners.forEach((l) => l(board))
+    if (record) history.push(board)
   },
 
   addElements(nodes: BoardNode[], edges: BoardEdge[] = []): void {
@@ -121,6 +130,20 @@ export const boardActions = {
 
   setTool(tool: Tool): void {
     set({ tool })
+  },
+
+  setPen(p: Partial<Pick<BoardState, 'penColor' | 'penSize'>>): void {
+    set(p)
+  },
+
+  undo(): void {
+    const prev = history.undo()
+    if (prev) boardActions.replace({ ...prev, title: get().board?.title ?? prev.title }, false)
+  },
+
+  redo(): void {
+    const next = history.redo()
+    if (next) boardActions.replace({ ...next, title: get().board?.title ?? next.title }, false)
   },
 
   setEditingEdge(id: string | null): void {
@@ -153,6 +176,7 @@ onBoardExternal(async (e) => {
     if (disk) {
       set((s) => ({ board: disk, rev: s.rev + 1 }))
       publish(disk)
+      history.reset(disk)
     }
   }
   await app.refreshBoards()
