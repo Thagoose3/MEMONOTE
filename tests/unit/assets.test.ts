@@ -56,6 +56,14 @@ describe('assets.saveImage', () => {
     expect(ref).toEqual({ file: `${sha}.gif`, width: 8000, height: 5000 })
   })
 
+  it('webp is never resized (no decoder) and its thumbnail is the original', async () => {
+    const ops = new FakeOps(8000, 5000)
+    const ref = await createAssets(dir, ops).saveImage(bytes, 'image/webp')
+    expect(ops.resizeCalls).toEqual([])
+    expect(ref).toEqual({ file: `${sha}.webp`, width: 8000, height: 5000 })
+    expect(existsSync(join(dir, 'assets', '.thumbs', ref.file))).toBe(true)
+  })
+
   it('thumbnail written to assets/.thumbs with max side 400', async () => {
     const ops = new FakeOps(1000, 800)
     const ref = await createAssets(dir, ops).saveImage(bytes, 'image/png')

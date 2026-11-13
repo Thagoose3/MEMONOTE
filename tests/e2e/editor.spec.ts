@@ -20,6 +20,30 @@ test('paste png from clipboard inserts image that survives relaunch', async () =
   await second.app.close()
 })
 
+for (const [kind, mime, data] of [
+  ['GIF', 'image/gif', 'R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7'],
+  ['WebP', 'image/webp', 'UklGRiQAAABXRUJQVlA4IBgAAAAwAQCdASoBAAEAAwA0JaQAA3AA/vuUAAA=']
+] as const) {
+  test(`paste real ${kind} bytes inserts a saved image`, async () => {
+    const { app, page } = await launchApp()
+    await newNote(page, `รูป ${kind}`, 'x ')
+    await page.evaluate(
+      ([mime, data]) => {
+        const bin = atob(data)
+        const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
+        const dt = new DataTransfer()
+        dt.items.add(new File([bytes], 'a', { type: mime }))
+        document
+          .querySelector('[aria-label="เนื้อหา"]')!
+          .dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }))
+      },
+      [mime, data] as const
+    )
+    await expect(savedImg(page)).toHaveCount(1)
+    await app.close()
+  })
+}
+
 test('drop image file inserts image', async () => {
   const { app, page } = await launchApp()
   await newNote(page, 'ลากรูป', 'x')

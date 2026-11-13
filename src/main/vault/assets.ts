@@ -41,7 +41,8 @@ export function createAssets(vaultDir: string, ops: ImageOps, onWrite: (p: strin
       if (!ext) throw new Error('unsupported-image')
       const file = `${createHash('sha256').update(bytes).digest('hex')}.${ext}`
       const { width, height } = ops.size(bytes)
-      const big = Math.max(width, height) > MAX_SIDE && ext !== 'gif'
+      const resizable = ext === 'png' || ext === 'jpg' // GIF/WebP: keep as-is (animation; no decoder)
+      const big = Math.max(width, height) > MAX_SIDE && resizable
       const dims = big ? scaled(width, height, MAX_SIDE) : { width, height }
       const target = join(dir, file)
       if (!(await exists(target))) {
@@ -50,7 +51,7 @@ export function createAssets(vaultDir: string, ops: ImageOps, onWrite: (p: strin
       }
       const thumb = join(thumbs, file)
       if (!(await exists(thumb))) {
-        const small = Math.max(width, height) <= THUMB_SIDE || ext === 'gif'
+        const small = Math.max(width, height) <= THUMB_SIDE || !resizable
         await writeFileAtomic(thumb, small ? bytes : ops.resize(bytes, THUMB_SIDE, mime))
       }
       return { file, ...dims }
