@@ -5,7 +5,8 @@ import { TextSelection } from '@tiptap/pm/state'
 import { ulid } from 'ulid'
 import { useRef } from 'react'
 import { storage } from '../../storage'
-import { showToast } from '../../store/appStore'
+import { actions, showToast, useApp } from '../../store/appStore'
+import { trackUpload } from '../uploads'
 
 export const assetUrl = (file: string): string => `memo-asset://a/${encodeURIComponent(file)}`
 export const thumbUrl = (file: string): string => `memo-asset://t/${encodeURIComponent(file)}`
@@ -103,26 +104,39 @@ export function insertImages(view: EditorView, files: File[], pos?: number): voi
   tr = tr.setSelection(TextSelection.near(tr.doc.resolve($after.pos + 1)))
   view.dispatch(tr.scrollIntoView())
 
-  files.forEach(async (file, i) => {
+  const noteId = useApp.getState().openNote?.id ?? null
+  files.forEach((file, i) => {
     const uploadId = ids[i]
-    let ref: { file: string } | null = null
-    try {
-      ref = await storage.assets.saveImage(new Uint8Array(await file.arrayBuffer()), file.type)
-    } catch {
-      showToast('บันทึกรูปไม่ได้')
-    }
-    if (view.isDestroyed) return
-    const st = view.state
-    st.doc.descendants((node, p) => {
-      if (node.type.name === 'image' && node.attrs.uploadId === uploadId) {
-        view.dispatch(
-          ref
-            ? st.tr.setNodeMarkup(p, undefined, { ...node.attrs, file: ref.file, uploadId: null })
-            : st.tr.delete(p, p + node.nodeSize)
-        )
-        return false
-      }
-      return true
-    })
+    trackUpload(
+      uploadId,
+      (async () => {
+        let ref: { file: string } | null = null
+        try {
+          ref = await storage.assets.saveImage(new Uint8Array(await file.arrayBuffer()), file.type)
+        } catch {
+          showToast('บันทึกรูปไม่ได้')
+        }
+        // Editor still showing the placeholder: fill it in place.
+        if (!view.isDestroyed) {
+          const st = view.state
+          let found = false
+          st.doc.descendants((node, p) => {
+            if (found) return false
+            if (node.type.name === 'image' && node.attrs.uploadId === uploadId) {
+              found = true
+              view.dispatch(
+                ref
+                  ? st.tr.setNodeMarkup(p, undefined, { ...node.attrs, file: ref.file, uploadId: null })
+                  : st.tr.delete(p, p + node.nodeSize)
+              )
+            }
+            return !found
+          })
+          if (found) return
+        }
+        // Editor is gone (switched note / closing): patch the saved note instead.
+        if (noteId) await actions.resolveUpload(noteId, uploadId, ref?.file ?? null)
+      })()
+    )
   })
 }

@@ -44,6 +44,44 @@ for (const [kind, mime, data] of [
   })
 }
 
+test('paste big image then close the app immediately -> image still saved in the note', async () => {
+  const first = await launchApp()
+  await newNote(first.page, 'รูปแล้วรีบไป', 'x ')
+  await pastePng(first.page, 8000, 5000)
+  await closeApp(first.app) // leave while the image is still being saved
+  const second = await launchApp({ vault: first.vault, configDir: first.configDir })
+  await second.page.getByRole('button', { name: /รูปแล้วรีบไป/ }).click()
+  await expect(savedImg(second.page)).toHaveCount(1)
+  await expect(editor(second.page)).not.toContainText('กำลังบันทึกรูป')
+  await second.app.close()
+})
+
+test('a placeholder left without a pending upload is removed when the note opens', async () => {
+  const first = await launchApp()
+  await first.page.evaluate(() =>
+    window.memo.notes.save({
+      id: 'ORPHAN',
+      title: 'ค้างอยู่',
+      folder: null,
+      created: 1,
+      updated: 1,
+      content: {
+        type: 'doc',
+        content: [
+          { type: 'paragraph', content: [{ type: 'text', text: 'ก่อน' }] },
+          { type: 'image', attrs: { file: null, width: null, uploadId: 'gone' } }
+        ]
+      }
+    })
+  )
+  await closeApp(first.app)
+  const second = await launchApp({ vault: first.vault, configDir: first.configDir })
+  await second.page.getByRole('button', { name: /ค้างอยู่/ }).click()
+  await expect(editor(second.page)).toContainText('ก่อน')
+  await expect(editor(second.page)).not.toContainText('กำลังบันทึกรูป')
+  await second.app.close()
+})
+
 test('drop image file inserts image', async () => {
   const { app, page } = await launchApp()
   await newNote(page, 'ลากรูป', 'x')

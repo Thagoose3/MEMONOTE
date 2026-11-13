@@ -7,6 +7,8 @@ import { createSearchIndex } from '../search/searchIndex'
 import { computeBacklinks } from '../links/backlinks'
 import { createAutosaver } from './autosave'
 import { resolveExternalNoteChange } from './conflict'
+import { fillUpload, stripOrphanPlaceholders } from '../editor/uploadDoc'
+import { pendingUploadIds, waitForUploads } from '../editor/uploads'
 
 export type Mode = 'note' | 'board'
 
@@ -125,8 +127,27 @@ export const actions = {
     }
   },
 
-  flush(): Promise<void> {
-    return noteSaver.flush()
+  /** Wait for in-flight image uploads (they may still edit the note), then write pending edits. */
+  async flush(): Promise<void> {
+    await waitForUploads()
+    await noteSaver.flush()
+  },
+
+  /** An image upload finished after its editor went away: write the result into the note itself. */
+  async resolveUpload(noteId: string, uploadId: string, file: string | null): Promise<void> {
+    await noteSaver.flush()
+    const open = get().openNote
+    if (open?.id === noteId) {
+      const next = { ...open, content: fillUpload(open.content, uploadId, file) }
+      set((s) => ({ openNote: next, noteVersion: s.noteVersion + 1 }))
+      noteSaver.schedule(next)
+      await noteSaver.flush()
+      return
+    }
+    const note = await storage.notes.read(noteId).catch(() => null)
+    if (!note) return
+    const content = fillUpload(note.content, uploadId, file)
+    if (content !== note.content) applyMeta(await storage.notes.save({ ...note, content }))
   },
 
   setMode(mode: Mode): void {
@@ -135,7 +156,8 @@ export const actions = {
 
   async openNote(id: string): Promise<void> {
     await noteSaver.flush()
-    const note = await storage.notes.read(id)
+    const raw = await storage.notes.read(id)
+    const note = { ...raw, content: stripOrphanPlaceholders(raw.content, pendingUploadIds()) }
     set((s) => ({ openNote: note, noteVersion: s.noteVersion + 1, mode: 'note', drawerOpen: false }))
   },
 
