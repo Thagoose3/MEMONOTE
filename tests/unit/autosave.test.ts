@@ -43,6 +43,64 @@ describe('createAutosaver', () => {
     expect(saved).toEqual([])
   })
 
+  it('a failed save keeps the value, reports it, and retries until it succeeds', async () => {
+    vi.useFakeTimers()
+    const saved: string[] = []
+    const errors: unknown[] = []
+    let failures = 2
+    const a = createAutosaver<string>(
+      async (v) => {
+        if (failures-- > 0) throw new Error('EBUSY')
+        saved.push(v)
+      },
+      500,
+      (e) => errors.push(e)
+    )
+    a.schedule('edit')
+    await vi.advanceTimersByTimeAsync(500)
+    expect(saved).toEqual([])
+    expect(errors).toHaveLength(1)
+    expect(a.pending()).toBe(true)
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(saved).toEqual(['edit'])
+    expect(a.pending()).toBe(false)
+  })
+
+  it('a newer edit made while a save failed wins the retry', async () => {
+    vi.useFakeTimers()
+    const saved: string[] = []
+    let fail = true
+    const a = createAutosaver<string>(async (v) => {
+      if (fail) {
+        fail = false
+        throw new Error('EPERM')
+      }
+      saved.push(v)
+    }, 500, () => {})
+    a.schedule('old')
+    await vi.advanceTimersByTimeAsync(500)
+    a.schedule('new')
+    await vi.advanceTimersByTimeAsync(10000)
+    expect(saved).toEqual(['new'])
+  })
+
+  it('flush retries a failed value right away', async () => {
+    vi.useFakeTimers()
+    const saved: string[] = []
+    let fail = true
+    const a = createAutosaver<string>(async (v) => {
+      if (fail) {
+        fail = false
+        throw new Error('EBUSY')
+      }
+      saved.push(v)
+    }, 500, () => {})
+    a.schedule('x')
+    await vi.advanceTimersByTimeAsync(500)
+    await a.flush()
+    expect(saved).toEqual(['x'])
+  })
+
   it('flush with nothing pending does not save', async () => {
     const save = vi.fn(async () => {})
     await createAutosaver<string>(save).flush()

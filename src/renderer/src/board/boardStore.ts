@@ -4,7 +4,7 @@ import { CONFLICT_SUFFIX, type Board, type BoardEdge, type BoardNode, type PenSi
 import { createHistory } from './history'
 import { PEN_COLORS } from './strokePath'
 import { storage } from '../storage'
-import { actions as app, onBoardExternal, showToast, useApp } from '../store/appStore'
+import { actions as app, onBoardExternal, SAVE_FAILED, showToast, useApp } from '../store/appStore'
 import { createAutosaver } from '../store/autosave'
 import { publishBoardTitle } from '../shell/boardTitle'
 import { addLinkedNotes } from './boardModel'
@@ -37,7 +37,7 @@ export const useBoard = create<BoardState>(() => ({
 const set = useBoard.setState
 const get = useBoard.getState
 
-const saver = createAutosaver<Board>((b) => storage.boards.save(b))
+const saver = createAutosaver<Board>((b) => storage.boards.save(b), 500, () => showToast(SAVE_FAILED))
 storage.onFlushRequest(() => boardActions.flush())
 
 /** A text field on the canvas that is being edited right now and how to commit its current value. */

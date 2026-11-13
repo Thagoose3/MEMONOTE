@@ -76,11 +76,17 @@ function dropMeta(id: string): void {
 }
 
 let dirty = false
-const noteSaver = createAutosaver<Note>(async (n) => {
-  const meta = await storage.notes.save(n)
-  dirty = false
-  applyMeta(meta)
-})
+export const SAVE_FAILED = 'บันทึกไม่สำเร็จ กำลังลองใหม่…'
+
+const noteSaver = createAutosaver<Note>(
+  async (n) => {
+    const meta = await storage.notes.save(n)
+    dirty = false
+    applyMeta(meta)
+  },
+  500,
+  () => showToast(SAVE_FAILED)
+)
 
 export function showToast(text: string): void {
   set({ toast: text })

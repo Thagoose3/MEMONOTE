@@ -6,18 +6,20 @@ let counter = 0
 export async function writeFileAtomic(path: string, data: string | Uint8Array): Promise<void> {
   const tmp = `${path}.${process.pid}.${counter++}.tmp`
   await fs.writeFile(tmp, data)
-  try {
-    await fs.rename(tmp, path)
-  } catch (err) {
-    // Windows can briefly lock the target (antivirus, sync clients); retry once.
-    await new Promise((r) => setTimeout(r, 50))
+  // Windows can briefly lock the target (antivirus, OneDrive/Dropbox); retry with growing delays.
+  const delays = [0, 50, 100, 200, 400, 800]
+  let lastErr: unknown
+  for (const ms of delays) {
+    if (ms) await new Promise((r) => setTimeout(r, ms))
     try {
       await fs.rename(tmp, path)
-    } catch {
-      await fs.rm(tmp, { force: true })
-      throw err
+      return
+    } catch (err) {
+      lastErr = err
     }
   }
+  await fs.rm(tmp, { force: true })
+  throw lastErr
 }
 
 export async function readJson<T>(path: string): Promise<T> {

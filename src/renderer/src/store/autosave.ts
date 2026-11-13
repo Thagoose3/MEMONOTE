@@ -5,30 +5,55 @@ export interface Autosaver<T> {
   cancel(): void
 }
 
-/** Debounced saver: the latest scheduled value is saved `delayMs` after the last schedule. */
-export function createAutosaver<T>(save: (v: T) => Promise<unknown>, delayMs = 500): Autosaver<T> {
+const MAX_RETRY_MS = 8000
+
+/**
+ * Debounced saver: the latest scheduled value is saved `delayMs` after the last schedule.
+ * A failed save keeps its value (unless a newer one arrived), reports via `onError`, and retries with backoff.
+ */
+export function createAutosaver<T>(
+  save: (v: T) => Promise<unknown>,
+  delayMs = 500,
+  onError: (err: unknown) => void = (err) => console.error('autosave failed', err)
+): Autosaver<T> {
   let timer: ReturnType<typeof setTimeout> | null = null
   let latest: { v: T } | null = null
   let inflight: Promise<unknown> = Promise.resolve()
+  let failures = 0
 
-  const run = (): Promise<unknown> => {
+  const arm = (ms: number): void => {
+    if (timer) clearTimeout(timer)
+    timer = setTimeout(run, ms)
+  }
+
+  function run(): Promise<unknown> {
     if (timer) clearTimeout(timer)
     timer = null
     if (!latest) return inflight
-    const { v } = latest
+    const job = latest
     latest = null
-    inflight = inflight.then(() => save(v)).catch((err) => console.error('autosave failed', err))
+    inflight = inflight.then(async () => {
+      try {
+        await save(job.v)
+        failures = 0
+      } catch (err) {
+        failures++
+        onError(err)
+        if (!latest) latest = job // keep the edit unless a newer one superseded it
+        arm(Math.min(1000 * 2 ** (failures - 1), MAX_RETRY_MS))
+      }
+    })
     return inflight
   }
 
   return {
     schedule(v) {
       latest = { v }
-      if (timer) clearTimeout(timer)
-      timer = setTimeout(run, delayMs)
+      arm(delayMs)
     },
     async flush() {
       await run()
+      if (latest) await run() // one immediate retry if that save failed
     },
     pending() {
       return latest !== null
