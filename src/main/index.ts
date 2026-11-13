@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, session } from 'electron'
+import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, session, shell } from 'electron'
 import { join, normalize, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { currentVaultDir, registerIpc } from './ipc'
@@ -52,6 +52,14 @@ function createWindow(): BrowserWindow {
   })
   win.setMenuBarVisibility(false)
   win.once('ready-to-show', () => win.show())
+
+  // The app page must never be replaced (stray file drops, links) and must never spawn windows that
+  // would inherit the preload bridge. Web links open in the user's browser instead.
+  win.webContents.on('will-navigate', (e) => e.preventDefault())
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) void shell.openExternal(url)
+    return { action: 'deny' }
+  })
   const onTheme = (): void => {
     if (!win.isDestroyed()) win.setTitleBarOverlay(overlayColors())
   }
