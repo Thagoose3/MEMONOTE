@@ -1,13 +1,35 @@
-import { app, BrowserWindow, nativeTheme, session } from 'electron'
-import { join } from 'node:path'
+import { app, BrowserWindow, ipcMain, nativeTheme, net, protocol, session } from 'electron'
+import { join, normalize, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import { currentVaultDir, registerIpc } from './ipc'
 
 const CSP =
   "default-src 'self'; img-src 'self' memo-asset: data: blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'"
+const FLUSH_TIMEOUT_MS = 3000
+
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'memo-asset', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }
+])
 
 function overlayColors(): { color: string; symbolColor: string; height: number } {
   return nativeTheme.shouldUseDarkColors
     ? { color: '#1b1c1f', symbolColor: '#e6e6e6', height: 40 }
     : { color: '#f7f7f8', symbolColor: '#1f1f1f', height: 40 }
+}
+
+/** memo-asset://a/<file> -> <vault>/assets/<file>, memo-asset://t/<file> -> <vault>/assets/.thumbs/<file> */
+function registerAssetProtocol(): void {
+  protocol.handle('memo-asset', (req) => {
+    const vault = currentVaultDir()
+    const url = new URL(req.url)
+    const file = decodeURIComponent(url.pathname.replace(/^\//, ''))
+    const base = url.hostname === 't' ? join(vault ?? '', 'assets', '.thumbs') : join(vault ?? '', 'assets')
+    const full = normalize(join(base, file))
+    if (!vault || !file || file.includes('..') || !full.startsWith(base + sep)) {
+      return new Response('not found', { status: 404 })
+    }
+    return net.fetch(pathToFileURL(full).toString())
+  })
 }
 
 function createWindow(): BrowserWindow {
@@ -30,8 +52,31 @@ function createWindow(): BrowserWindow {
   })
   win.setMenuBarVisibility(false)
   win.once('ready-to-show', () => win.show())
-  nativeTheme.on('updated', () => {
+  const onTheme = (): void => {
     if (!win.isDestroyed()) win.setTitleBarOverlay(overlayColors())
+  }
+  nativeTheme.on('updated', onTheme)
+  win.on('closed', () => nativeTheme.off('updated', onTheme))
+
+  // Flush pending autosaves before the window goes away.
+  let flushed = false
+  win.on('close', (e) => {
+    if (flushed || win.webContents.isDestroyed()) return
+    e.preventDefault()
+    let done = false
+    const finish = (): void => {
+      if (done) return
+      done = true
+      flushed = true
+      ipcMain.removeListener('app:flushed', onFlushed)
+      if (!win.isDestroyed()) win.destroy()
+    }
+    const onFlushed = (ev: Electron.IpcMainEvent): void => {
+      if (ev.sender === win.webContents) finish()
+    }
+    ipcMain.on('app:flushed', onFlushed)
+    setTimeout(finish, FLUSH_TIMEOUT_MS)
+    win.webContents.send('app:flush')
   })
 
   if (!app.isPackaged && process.env.ELECTRON_RENDERER_URL) {
@@ -42,12 +87,14 @@ function createWindow(): BrowserWindow {
   return win
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!process.env.ELECTRON_RENDERER_URL) {
     session.defaultSession.webRequest.onHeadersReceived((details, cb) => {
       cb({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [CSP] } })
     })
   }
+  registerAssetProtocol()
+  await registerIpc()
   createWindow()
 })
 
