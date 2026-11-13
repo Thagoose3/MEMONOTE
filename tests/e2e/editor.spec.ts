@@ -48,6 +48,7 @@ test('```js creates highlighted code block; copy button copies its text', async 
   const block = editor(page).locator('pre')
   await expect(block).toContainText('const answer = 42')
   await expect(block.locator('.hljs-keyword').first()).toHaveText('const')
+  await expect(page.getByLabel('ภาษา')).toHaveValue('javascript')
   await page.getByRole('button', { name: 'ก๊อปโค้ด' }).click()
   await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe('const answer = 42')
   await app.close()

@@ -21,7 +21,11 @@ export async function launchApp(opts: { vault?: string | null; configDir?: strin
   const env: Record<string, string> = { ...(process.env as Record<string, string>), MEMONOTE_CONFIG_DIR: configDir }
   if (vault) env.MEMONOTE_VAULT = vault
   else delete env.MEMONOTE_VAULT
-  const app = await electron.launch({ args: [resolve(__dirname, '../../out/main/index.js')], env })
+  // MEMONOTE_E2E_EXE=dist/win-unpacked/MEMONOTE.exe runs the suite against the packaged app
+  const exe = process.env.MEMONOTE_E2E_EXE
+  const app = exe
+    ? await electron.launch({ executablePath: resolve(exe), args: [], env })
+    : await electron.launch({ args: [resolve(__dirname, '../../out/main/index.js')], env })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
   await page.waitForFunction(() => document.body.dataset.ready === '1', null, { timeout: 15000 })
