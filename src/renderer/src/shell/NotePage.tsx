@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { actions, useApp } from '../store/appStore'
 import { NoteEditor } from '../editor/NoteEditor'
+import { Backlinks } from '../editor/Backlinks'
 
 export function NotePage(): React.JSX.Element | null {
   const note = useApp((s) => s.openNote)
@@ -30,6 +31,7 @@ export function NotePage(): React.JSX.Element | null {
         }}
       />
       <NoteEditor key={`${note.id}:${version}`} note={note} onChange={(content) => actions.editOpenNote({ content })} />
+      <Backlinks noteId={note.id} />
     </div>
   )
 }

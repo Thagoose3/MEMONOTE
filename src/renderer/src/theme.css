@@ -186,3 +186,13 @@ button { font: inherit; color: inherit; }
 .suggest li.selected { background: var(--bg-soft); }
 .suggest-hint { color: var(--fg-muted); font-size: 12px; }
 .suggest-empty { color: var(--fg-muted); cursor: default; }
+
+/* ---------- wiki links ---------- */
+.wiki-link { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 4px; padding: 0 3px; cursor: pointer; }
+.wiki-link:hover { text-decoration: underline; }
+.wiki-link.missing { color: var(--fg-muted); text-decoration: line-through; background: var(--bg-soft); cursor: default; }
+.wiki-link.ProseMirror-selectednode { outline: 2px solid var(--accent); }
+.backlinks { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 32px; padding-top: 12px; border-top: 1px solid var(--border); }
+.backlinks-label { color: var(--fg-muted); font-size: 14px; }
+.backlink { border: 1px solid var(--border); background: var(--bg-soft); border-radius: 999px; padding: 2px 12px; min-height: 30px; cursor: pointer; }
+.backlink:hover { background: var(--bg-hover); }
