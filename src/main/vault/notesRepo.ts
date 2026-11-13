@@ -2,24 +2,12 @@ import { promises as fs } from 'node:fs'
 import { join } from 'node:path'
 import { ulid } from 'ulid'
 import { CONFLICT_SUFFIX, type ListResult, type Note, type NoteMeta } from '@shared/types'
-import { extractLinkIds, extractPlainText, firstImage } from '@shared/doc'
+import { noteToMeta } from '@shared/doc'
 import { readJson, writeFileAtomic } from './fsAtomic'
 
 export type WriteHook = (path: string) => void
 
-export function toMeta(n: Note): NoteMeta {
-  return {
-    id: n.id,
-    title: n.title,
-    folder: n.folder,
-    created: n.created,
-    updated: n.updated,
-    text: extractPlainText(n.content),
-    linkIds: extractLinkIds(n.content),
-    firstImage: firstImage(n.content),
-    ...(n.conflict ? { conflict: true } : {})
-  }
-}
+const toMeta = noteToMeta
 
 function isNote(x: unknown): x is Note {
   const n = x as Note

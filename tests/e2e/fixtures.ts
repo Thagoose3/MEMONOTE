@@ -24,6 +24,7 @@ export async function launchApp(opts: { vault?: string | null; configDir?: strin
   const app = await electron.launch({ args: [resolve(__dirname, '../../out/main/index.js')], env })
   const page = await app.firstWindow()
   await page.waitForLoadState('domcontentloaded')
+  await page.waitForFunction(() => document.body.dataset.ready === '1', null, { timeout: 15000 })
   return { app, page, vault: vault ?? '', configDir }
 }
 

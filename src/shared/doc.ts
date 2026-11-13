@@ -1,4 +1,18 @@
-import type { DocNode } from './types'
+import type { DocNode, Note, NoteMeta } from './types'
+
+export function noteToMeta(n: Note): NoteMeta {
+  return {
+    id: n.id,
+    title: n.title,
+    folder: n.folder,
+    created: n.created,
+    updated: n.updated,
+    text: extractPlainText(n.content),
+    linkIds: extractLinkIds(n.content),
+    firstImage: firstImage(n.content),
+    ...(n.conflict ? { conflict: true } : {})
+  }
+}
 
 const BLOCK_TYPES = new Set([
   'paragraph', 'heading', 'codeBlock', 'blockquote', 'listItem', 'tableCell', 'tableHeader', 'copyField', 'image'
